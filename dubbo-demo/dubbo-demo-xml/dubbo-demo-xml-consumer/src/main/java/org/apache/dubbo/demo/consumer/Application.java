@@ -36,6 +36,7 @@ public class Application {
         GreetingService greetingService = context.getBean("greetingService", GreetingService.class);
         RestDemoService restDemoService = context.getBean("restDemoService", RestDemoService.class);
 
+        System.out.println("测试提交");
         new Thread(() -> {
             while (true) {
                 try {
