@@ -20,32 +20,50 @@ import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
 import org.apache.dubbo.common.stream.StreamObserver;
 
+/**
+ * Stream acts as a bi-directional intermediate layer for processing streaming data . It serializes object instance to
+ * byte[] then send to remote, and deserializes byte[] to object instance from remote. {@link #inboundTransportObserver()}
+ * and {@link #subscribe(OutboundTransportObserver)} provide {@link TransportObserver} to receive or send remote data.
+ * {@link #inboundMessageObserver()} and {@link #subscribe(StreamObserver)} provide {@link StreamObserver}
+ * as API for users fetching/emitting objects from/to remote peer.
+ */
 public interface Stream {
 
     Logger LOGGER = LoggerFactory.getLogger(Stream.class);
 
-    void subscribe(TransportObserver observer);
+    /**
+     * Register an upstream data observer to receive byte[] sent by this stream
+     *
+     * @param observer receives remote byte[] data
+     */
+    void subscribe(OutboundTransportObserver observer);
 
-    TransportObserver asTransportObserver();
+    /**
+     * Get a downstream data observer for writing byte[] data to this stream
+     *
+     * @return an observer for writing byte[] to remote peer
+     */
+    TransportObserver inboundTransportObserver();
 
-    void subscribe(StreamObserver<Object> observer);
+    /**
+     * Register an upstream data observer to receive instance sent by this stream
+     *
+     * @param outboundMessageObserver receives remote byte[] data
+     */
+    void subscribe(StreamObserver<Object> outboundMessageObserver);
 
-    StreamObserver<Object> asStreamObserver();
+    /**
+     * Get a downstream data observer for transmitting instances to application code
+     *
+     * @return an observer for writing byte[] to remote peer
+     */
+    StreamObserver<Object> inboundMessageObserver();
 
+    /**
+     * Execute a task in stream's executor
+     *
+     * @param runnable task to run
+     */
     void execute(Runnable runnable);
 
-    enum OperationResult {
-        OK,
-        FAILURE,
-        NETWORK_FAIL
-    }
-
-    interface OperationHandler {
-
-        /**
-         * @param result operation's result
-         * @param cause  null if the operation succeed
-         */
-        void operationDone(OperationResult result, Throwable cause);
-    }
 }

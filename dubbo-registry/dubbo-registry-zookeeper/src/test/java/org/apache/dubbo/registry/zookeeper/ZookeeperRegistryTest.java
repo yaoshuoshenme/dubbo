@@ -16,14 +16,15 @@
  */
 package org.apache.dubbo.registry.zookeeper;
 
+import org.apache.curator.test.TestingServer;
 import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.status.Status;
 import org.apache.dubbo.common.utils.NetUtils;
 import org.apache.dubbo.registry.NotifyListener;
 import org.apache.dubbo.registry.Registry;
 import org.apache.dubbo.registry.status.RegistryStatusChecker;
-
-import org.apache.curator.test.TestingServer;
+import org.apache.dubbo.rpc.RpcException;
+import org.apache.dubbo.rpc.model.ApplicationModel;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +40,8 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.mock;
 
 public class ZookeeperRegistryTest {
@@ -49,6 +52,7 @@ public class ZookeeperRegistryTest {
     private URL anyUrl = URL.valueOf("zookeeper://zookeeper/*");
     private URL registryUrl;
     private ZookeeperRegistryFactory zookeeperRegistryFactory;
+    private NotifyListener listener;
 
     @BeforeEach
     public void setUp() throws Exception {
@@ -57,7 +61,7 @@ public class ZookeeperRegistryTest {
         this.zkServer.start();
 
         this.registryUrl = URL.valueOf("zookeeper://localhost:" + zkServerPort);
-        zookeeperRegistryFactory = new ZookeeperRegistryFactory();
+        zookeeperRegistryFactory = new ZookeeperRegistryFactory(ApplicationModel.defaultModel());
         this.zookeeperRegistry = (ZookeeperRegistry) zookeeperRegistryFactory.createRegistry(registryUrl);
     }
 
@@ -70,7 +74,7 @@ public class ZookeeperRegistryTest {
     public void testAnyHost() {
         Assertions.assertThrows(IllegalStateException.class, () -> {
             URL errorUrl = URL.valueOf("multicast://0.0.0.0/");
-            new ZookeeperRegistryFactory().createRegistry(errorUrl);
+            new ZookeeperRegistryFactory(ApplicationModel.defaultModel()).createRegistry(errorUrl);
         });
     }
 
@@ -122,6 +126,23 @@ public class ZookeeperRegistryTest {
         assertThat(lookup.size(), is(1));
     }
 
+    @Test
+    public void testLookupIllegalUrl() {
+        try {
+            zookeeperRegistry.lookup(null);
+            fail();
+        } catch (IllegalArgumentException expected) {
+            assertThat(expected.getMessage(),
+                containsString("lookup url == null"));
+        }
+    }
+
+    @Test
+    public void testLookupWithException() {
+        URL errorUrl = URL.valueOf("multicast://0.0.0.0/");
+        Assertions.assertThrows(RpcException.class, () -> zookeeperRegistry.lookup(errorUrl));
+    }
+
     @Disabled
     @Test
     /*
@@ -129,7 +150,7 @@ public class ZookeeperRegistryTest {
       @see https://github.com/apache/dubbo/issues/1787
      */
     public void testStatusChecker() {
-        RegistryStatusChecker registryStatusChecker = new RegistryStatusChecker();
+        RegistryStatusChecker registryStatusChecker = new RegistryStatusChecker(ApplicationModel.defaultModel());
         Status status = registryStatusChecker.check();
         assertThat(status.getLevel(), is(Status.Level.UNKNOWN));
 
@@ -151,5 +172,34 @@ public class ZookeeperRegistryTest {
         zookeeperRegistry.subscribe(anyUrl, urls -> latch.countDown());
         zookeeperRegistry.register(serviceUrl);
         latch.await();
+    }
+
+    @Test
+    public void testDestroy() {
+        zookeeperRegistry.destroy();
+        assertThat(zookeeperRegistry.isAvailable(), is(false));
+    }
+
+
+    @Test
+    public void testDoRegisterWithException() {
+        Assertions.assertThrows(RpcException.class, () -> {
+            URL errorUrl = URL.valueOf("multicast://0.0.0.0/");
+            zookeeperRegistry.doRegister(errorUrl);
+        });
+    }
+
+    @Test
+    public void testDoUnregisterWithException() {
+        Assertions.assertThrows(RpcException.class, () -> {
+            URL errorUrl = URL.valueOf("multicast://0.0.0.0/");
+            zookeeperRegistry.doUnregister(errorUrl);
+        });
+    }
+
+    @Test
+    public void testDoSubscribeWithException() {
+        Assertions.assertThrows(RpcException.class,
+            () -> zookeeperRegistry.doSubscribe(anyUrl, listener));
     }
 }

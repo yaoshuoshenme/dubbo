@@ -87,10 +87,10 @@ public class LocalCallMultipleReferenceAnnotationsTest {
         @DubboReference
         private HelloService helloService;
 
-        @DubboReference(group = "demo")
+        @DubboReference(group = "demo", version = "2.0.0")
         private HelloService demoHelloService;
 
-        @DubboReference(group = "${biz.group}")
+        @DubboReference(group = "${biz.group}", version = "${biz.version}")
         private HelloService helloService3;
 
     }
@@ -101,7 +101,7 @@ public class LocalCallMultipleReferenceAnnotationsTest {
         @DubboReference
         private HelloService helloService;
 
-        @DubboReference(group = "${biz.group}")
+        @DubboReference(group = "${biz.group}", version = "2.0.0")
         private HelloService demoHelloService;
 
     }
@@ -122,7 +122,7 @@ public class LocalCallMultipleReferenceAnnotationsTest {
         }
     }
 
-    @DubboService(group = "demo")
+    @DubboService(group = "demo", version = "2.0.0")
     public static class DemoHelloServiceImpl implements HelloService {
         @Override
         public String sayHello(String name) {

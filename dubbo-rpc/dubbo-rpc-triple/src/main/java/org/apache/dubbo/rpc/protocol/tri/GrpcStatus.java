@@ -17,12 +17,21 @@
 package org.apache.dubbo.rpc.protocol.tri;
 
 import org.apache.dubbo.common.utils.StringUtils;
+import org.apache.dubbo.remoting.TimeoutException;
 import org.apache.dubbo.remoting.exchange.Response;
+import org.apache.dubbo.rpc.RpcException;
 
 import io.netty.handler.codec.http.QueryStringDecoder;
 import io.netty.handler.codec.http.QueryStringEncoder;
 
-import static io.netty.util.internal.ObjectUtil.checkNotNull;
+import static org.apache.dubbo.rpc.RpcException.FORBIDDEN_EXCEPTION;
+import static org.apache.dubbo.rpc.RpcException.LIMIT_EXCEEDED_EXCEPTION;
+import static org.apache.dubbo.rpc.RpcException.METHOD_NOT_FOUND;
+import static org.apache.dubbo.rpc.RpcException.NETWORK_EXCEPTION;
+import static org.apache.dubbo.rpc.RpcException.SERIALIZATION_EXCEPTION;
+import static org.apache.dubbo.rpc.RpcException.TIMEOUT_EXCEPTION;
+import static org.apache.dubbo.rpc.RpcException.TIMEOUT_TERMINATE;
+import static org.apache.dubbo.rpc.protocol.tri.GrpcStatus.Code.UNAVAILABLE;
 
 /**
  * See https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
@@ -30,8 +39,8 @@ import static io.netty.util.internal.ObjectUtil.checkNotNull;
 
 public class GrpcStatus {
     public final Code code;
-    public final Throwable cause;
-    public final String description;
+    public Throwable cause;
+    public String description;
 
     public GrpcStatus(Code code, Throwable cause, String description) {
         this.code = code;
@@ -45,6 +54,10 @@ public class GrpcStatus {
 
     public static GrpcStatus fromCode(Code code) {
         return new GrpcStatus(code, null, null);
+    }
+
+    public static GrpcStatus fromCodeWithDescription(Code code, String description) {
+        return new GrpcStatus(code, null, description);
     }
 
     public static byte toDubboStatus(Code code) {
@@ -82,6 +95,52 @@ public class GrpcStatus {
         return status;
     }
 
+    /**
+     * todo The remaining exceptions are converted to status
+     */
+    public static GrpcStatus getStatus(Throwable throwable) {
+        return getStatus(throwable, null);
+    }
+
+    public static GrpcStatus getStatus(Throwable throwable, String description) {
+        if (throwable instanceof RpcException) {
+            RpcException rpcException = (RpcException) throwable;
+            Code code = rpcExceptionCodeToGrpcCode(rpcException.getCode());
+            return new GrpcStatus(code, throwable, description);
+        }
+        if (throwable instanceof TimeoutException) {
+            return new GrpcStatus(GrpcStatus.Code.DEADLINE_EXCEEDED, throwable, description);
+        }
+        return new GrpcStatus(Code.UNKNOWN, throwable, description);
+    }
+
+    public static Code rpcExceptionCodeToGrpcCode(int rpcExceptionCode) {
+        Code code;
+        switch (rpcExceptionCode) {
+            case TIMEOUT_EXCEPTION:
+            case TIMEOUT_TERMINATE:
+                code = Code.DEADLINE_EXCEEDED;
+                break;
+            case FORBIDDEN_EXCEPTION:
+                code = Code.PERMISSION_DENIED;
+                break;
+            case LIMIT_EXCEEDED_EXCEPTION:
+            case NETWORK_EXCEPTION:
+                code = UNAVAILABLE;
+                break;
+            case METHOD_NOT_FOUND:
+                code = Code.NOT_FOUND;
+                break;
+            case SERIALIZATION_EXCEPTION:
+                code = Code.INTERNAL;
+                break;
+            default:
+                code = Code.UNKNOWN;
+                break;
+        }
+        return code;
+    }
+
     public static String limitSizeTo4KB(String desc) {
         if (desc.length() < 4096) {
             return desc;
@@ -91,37 +150,24 @@ public class GrpcStatus {
     }
 
     public static String fromMessage(String raw) {
-        if (raw == null || raw.isEmpty()) {
+        if (StringUtils.isEmpty(raw)) {
             return "";
         }
         return QueryStringDecoder.decodeComponent(raw);
     }
 
-    public static Metadata trailersFromThrowable(Throwable t) {
-        Throwable cause = checkNotNull(t, "t");
-        while (cause != null) {
-            if (cause instanceof TripleRpcException) {
-                return ((TripleRpcException) cause).getTrailers();
-            }
-            cause = cause.getCause();
-        }
-        return null;
-    }
-
     public GrpcStatus withCause(Throwable cause) {
-        return new GrpcStatus(this.code, cause, this.description);
+        this.cause = cause;
+        return this;
     }
 
     public GrpcStatus withDescription(String description) {
-        return new GrpcStatus(this.code, this.cause, description);
+        this.description = description;
+        return this;
     }
 
-    public TripleRpcException asException() {
-        return new TripleRpcException(this);
-    }
-
-    public TripleRpcException asException(Metadata trailers) {
-        return new TripleRpcException(this, trailers);
+    public RpcException asException() {
+        return new RpcException(this.code.code, this.description, this.cause);
     }
 
     public String toMessage() {
@@ -142,7 +188,7 @@ public class GrpcStatus {
         return encoder.toString().substring(2);
     }
 
-    enum Code {
+    public enum Code {
         OK(0),
         CANCELLED(1),
         UNKNOWN(2),
@@ -158,7 +204,12 @@ public class GrpcStatus {
         UNIMPLEMENTED(12),
         INTERNAL(13),
         UNAVAILABLE(14),
-        DATA_LOSS(15);
+        DATA_LOSS(15),
+        /**
+         * The request does not have valid authentication credentials for the
+         * operation.
+         */
+        UNAUTHENTICATED(16);
 
         final int code;
 

@@ -112,7 +112,8 @@
         <file_encoding>UTF-8</file_encoding>
         <!-- Maven plugins -->
         <maven_jar_version>3.2.0</maven_jar_version>
-        <maven_surefire_version>2.22.2</maven_surefire_version>
+        <maven_surefire_version>3.0.0-M5</maven_surefire_version>
+        <maven_failsafe_version>3.0.0-M5</maven_failsafe_version>
         <maven_deploy_version>2.8.2</maven_deploy_version>
         <maven_compiler_version>3.8.1</maven_compiler_version>
         <maven_source_version>3.2.1</maven_source_version>
@@ -128,7 +129,7 @@
         <checkstyle_unix.skip>true</checkstyle_unix.skip>
         <rat.skip>true</rat.skip>
         <jacoco.skip>true</jacoco.skip>
-        <revision>3.0.3-SNAPSHOT</revision>
+        <revision>3.0.5-SNAPSHOT</revision>
     </properties>
 
     <modules>
@@ -150,10 +151,12 @@
         <module>dubbo-configcenter</module>
         <module>dubbo-dependencies</module>
         <module>dubbo-metadata</module>
+        <module>dubbo-metrics</module>
         <module>dubbo-build-tools</module>
         <module>dubbo-spring-boot</module>
         <module>dubbo-native</module>
         <module>dubbo-test</module>
+        <module>dubbo-native-plugin</module>
     </modules>
 
     <dependencyManagement>
@@ -320,6 +323,7 @@
                                         **/istio/v1/auth/IstioCertificateServiceGrpc.java,
                                         **/com/google/rpc/*,
                                         **/generated/**/*,
+                                        **/grpc/health/**/*,
                                         **/target/**/*,
                                         **/*.json
                                     </excludes>
@@ -696,11 +700,15 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>${maven_surefire_version}</version>
+                    <configuration>
+                        <!-- Activate the use of TCP to transmit events to the plugin to fix Corrupted STDOUT issue -->
+                        <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
+                    </configuration>
                 </plugin>
                 <!-- keep surefire and failsafe in sync -->
                 <plugin>
                     <artifactId>maven-failsafe-plugin</artifactId>
-                    <version>2.22.2</version>
+                    <version>${maven_failsafe_version}</version>
                 </plugin>
                 <plugin>
                     <artifactId>maven-clean-plugin</artifactId>

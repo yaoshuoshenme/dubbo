@@ -33,6 +33,7 @@ import org.apache.dubbo.rpc.cluster.router.mesh.rule.virtualservice.destination.
 import org.apache.dubbo.rpc.cluster.router.mesh.rule.virtualservice.destination.DubboRouteDestination;
 import org.apache.dubbo.rpc.cluster.router.mesh.rule.virtualservice.match.DubboMethodMatch;
 import org.apache.dubbo.rpc.cluster.router.mesh.rule.virtualservice.match.StringMatch;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -95,7 +96,7 @@ public class MeshRuleRouterTest {
             Map<String, String> invoker1Map = new HashMap<>();
             invoker1Map.put("env", "test1");
 
-            when(invoker1URL.getParameters()).thenReturn(invoker1Map);
+            when(invoker1URL.getServiceParameters(url.getProtocolServiceKey())).thenReturn(invoker1Map);
             when(invoker1.getUrl()).thenReturn(invoker1URL);
 
             invokers.add(invoker1);
@@ -107,7 +108,7 @@ public class MeshRuleRouterTest {
             Map<String, String> invoker1Map = new HashMap<>();
             invoker1Map.put("env", "test2");
 
-            when(invoker1URL.getParameters()).thenReturn(invoker1Map);
+            when(invoker1URL.getServiceParameters(url.getProtocolServiceKey())).thenReturn(invoker1Map);
             when(invoker1.getUrl()).thenReturn(invoker1URL);
 
             invokers.add(invoker1);
@@ -120,7 +121,7 @@ public class MeshRuleRouterTest {
             Map<String, String> invoker1Map = new HashMap<>();
             invoker1Map.put("env", "test3");
 
-            when(invoker1URL.getParameters()).thenReturn(invoker1Map);
+            when(invoker1URL.getServiceParameters(url.getProtocolServiceKey())).thenReturn(invoker1Map);
             when(invoker1.getUrl()).thenReturn(invoker1URL);
 
             invokers.add(invoker1);
@@ -241,7 +242,7 @@ public class MeshRuleRouterTest {
             Map<String, String> invoker1Map = new HashMap<>();
             invoker1Map.put("env", "test1");
 
-            when(invoker1URL.getParameters()).thenReturn(invoker1Map);
+            when(invoker1URL.getServiceParameters(url.getProtocolServiceKey())).thenReturn(invoker1Map);
             when(invoker1.getUrl()).thenReturn(invoker1URL);
 
             invokers.add(invoker1);
@@ -253,7 +254,7 @@ public class MeshRuleRouterTest {
             Map<String, String> invoker1Map = new HashMap<>();
             invoker1Map.put("env", "test2");
 
-            when(invoker1URL.getParameters()).thenReturn(invoker1Map);
+            when(invoker1URL.getServiceParameters(url.getProtocolServiceKey())).thenReturn(invoker1Map);
             when(invoker1.getUrl()).thenReturn(invoker1URL);
 
             invokers.add(invoker1);
@@ -266,7 +267,7 @@ public class MeshRuleRouterTest {
             Map<String, String> invoker1Map = new HashMap<>();
             invoker1Map.put("env", "test3");
 
-            when(invoker1URL.getParameters()).thenReturn(invoker1Map);
+            when(invoker1URL.getServiceParameters(url.getProtocolServiceKey())).thenReturn(invoker1Map);
             when(invoker1.getUrl()).thenReturn(invoker1URL);
 
             invokers.add(invoker1);
@@ -786,7 +787,7 @@ public class MeshRuleRouterTest {
             Map<String, String> invoker1Map = new HashMap<>();
             invoker1Map.put("env", "test1");
 
-            when(invoker1URL.getParameters()).thenReturn(invoker1Map);
+            when(invoker1URL.getServiceParameters(url.getProtocolServiceKey())).thenReturn(invoker1Map);
             when(invoker1.getUrl()).thenReturn(invoker1URL);
 
             invokers.add(invoker1);
@@ -798,7 +799,7 @@ public class MeshRuleRouterTest {
             Map<String, String> invoker1Map = new HashMap<>();
             invoker1Map.put("env", "test2");
 
-            when(invoker1URL.getParameters()).thenReturn(invoker1Map);
+            when(invoker1URL.getServiceParameters(url.getProtocolServiceKey())).thenReturn(invoker1Map);
             when(invoker1.getUrl()).thenReturn(invoker1URL);
 
             invokers.add(invoker1);
@@ -811,7 +812,7 @@ public class MeshRuleRouterTest {
             Map<String, String> invoker1Map = new HashMap<>();
             invoker1Map.put("env", "test3");
 
-            when(invoker1URL.getParameters()).thenReturn(invoker1Map);
+            when(invoker1URL.getServiceParameters(url.getProtocolServiceKey())).thenReturn(invoker1Map);
             when(invoker1.getUrl()).thenReturn(invoker1URL);
 
             invokers.add(invoker1);
@@ -929,7 +930,7 @@ public class MeshRuleRouterTest {
             Map<String, String> invoker1Map = new HashMap<>();
             invoker1Map.put("env", "test1");
 
-            when(invoker1URL.getParameters()).thenReturn(invoker1Map);
+            when(invoker1URL.getServiceParameters(url.getProtocolServiceKey())).thenReturn(invoker1Map);
             when(invoker1.getUrl()).thenReturn(invoker1URL);
 
             invokers.add(invoker1);
@@ -941,7 +942,7 @@ public class MeshRuleRouterTest {
             Map<String, String> invoker1Map = new HashMap<>();
             invoker1Map.put("env", "test2");
 
-            when(invoker1URL.getParameters()).thenReturn(invoker1Map);
+            when(invoker1URL.getServiceParameters(url.getProtocolServiceKey())).thenReturn(invoker1Map);
             when(invoker1.getUrl()).thenReturn(invoker1URL);
 
             invokers.add(invoker1);
@@ -954,7 +955,7 @@ public class MeshRuleRouterTest {
             Map<String, String> invoker1Map = new HashMap<>();
             invoker1Map.put("env", "test3");
 
-            when(invoker1URL.getParameters()).thenReturn(invoker1Map);
+            when(invoker1URL.getServiceParameters(url.getProtocolServiceKey())).thenReturn(invoker1Map);
             when(invoker1.getUrl()).thenReturn(invoker1URL);
 
             invokers.add(invoker1);
@@ -1069,7 +1070,7 @@ public class MeshRuleRouterTest {
             virtualServiceRuleList.add(virtualServiceRule);
             vsDestinationGroup.setVirtualServiceRuleList(virtualServiceRuleList);
             meshRuleRouter.computeSubset();
-            assertEquals(inputInvokers, meshRuleRouter.route((List) inputInvokers, inputURL, invocation));
+            assertEquals(inputInvokers, meshRuleRouter.route((List) inputInvokers, inputURL, invocation, false).getResult());
         }
 
 
@@ -1128,13 +1129,13 @@ public class MeshRuleRouterTest {
             virtualServiceRuleList.add(virtualServiceRule);
             vsDestinationGroup.setVirtualServiceRuleList(virtualServiceRuleList);
             meshRuleRouter.computeSubset();
-            assertNotEquals(inputInvokers, meshRuleRouter.route((List) inputInvokers, inputURL, invocation));
-            assertEquals(1, meshRuleRouter.route((List) inputInvokers, inputURL, invocation).size());
+            assertNotEquals(inputInvokers, meshRuleRouter.route((List) inputInvokers, inputURL, invocation, false).getResult());
+            assertEquals(1, meshRuleRouter.route((List) inputInvokers, inputURL, invocation, false).getResult().size());
 
             Map<String, String> invokerParameterMap = new HashMap<>();
             invokerParameterMap.put("env", "test1");
 
-            assertEquals(invokerParameterMap, ((Invoker) meshRuleRouter.route((List) inputInvokers, inputURL, invocation).get(0)).getUrl().getParameters());
+            assertEquals(invokerParameterMap, ((Invoker) meshRuleRouter.route((List) inputInvokers, inputURL, invocation, false).getResult().get(0)).getUrl().getServiceParameters(url.getProtocolServiceKey()));
         }
     }
 
@@ -1165,7 +1166,7 @@ public class MeshRuleRouterTest {
             Map<String, String> invoker1Map = new HashMap<>();
             invoker1Map.put("env", "test1");
 
-            when(invoker1URL.getParameters()).thenReturn(invoker1Map);
+            when(invoker1URL.getServiceParameters(url.getProtocolServiceKey())).thenReturn(invoker1Map);
             when(invoker1.getUrl()).thenReturn(invoker1URL);
 
             invokers.add(invoker1);
@@ -1177,7 +1178,7 @@ public class MeshRuleRouterTest {
             Map<String, String> invoker1Map = new HashMap<>();
             invoker1Map.put("env", "test2");
 
-            when(invoker1URL.getParameters()).thenReturn(invoker1Map);
+            when(invoker1URL.getServiceParameters(url.getProtocolServiceKey())).thenReturn(invoker1Map);
             when(invoker1.getUrl()).thenReturn(invoker1URL);
 
             invokers.add(invoker1);
@@ -1190,7 +1191,7 @@ public class MeshRuleRouterTest {
             Map<String, String> invoker1Map = new HashMap<>();
             invoker1Map.put("env", "test3");
 
-            when(invoker1URL.getParameters()).thenReturn(invoker1Map);
+            when(invoker1URL.getServiceParameters(url.getProtocolServiceKey())).thenReturn(invoker1Map);
             when(invoker1.getUrl()).thenReturn(invoker1URL);
 
             invokers.add(invoker1);
@@ -1322,13 +1323,13 @@ public class MeshRuleRouterTest {
             virtualServiceRuleList.add(virtualServiceRule);
             vsDestinationGroup.setVirtualServiceRuleList(virtualServiceRuleList);
             meshRuleRouter.computeSubset();
-            assertNotEquals(inputInvokers, meshRuleRouter.route((List) inputInvokers, inputURL, invocation));
-            assertEquals(1, meshRuleRouter.route((List) inputInvokers, inputURL, invocation).size());
+            assertNotEquals(inputInvokers, meshRuleRouter.route((List) inputInvokers, inputURL, invocation, false).getResult());
+            assertEquals(1, meshRuleRouter.route((List) inputInvokers, inputURL, invocation, false).getResult().size());
 
             Map<String, String> invokerParameterMap = new HashMap<>();
             invokerParameterMap.put("env", "test1");
 
-            assertEquals(invokerParameterMap, ((Invoker) meshRuleRouter.route((List) inputInvokers, inputURL, invocation).get(0)).getUrl().getParameters());
+            assertEquals(invokerParameterMap, ((Invoker) meshRuleRouter.route((List) inputInvokers, inputURL, invocation, false).getResult().get(0)).getUrl().getServiceParameters(url.getProtocolServiceKey()));
         }
 
         {
@@ -1398,10 +1399,10 @@ public class MeshRuleRouterTest {
             vsDestinationGroup.setVirtualServiceRuleList(virtualServiceRuleList);
             meshRuleRouter.computeSubset();
 
-            assertNull(meshRuleRouter.route((List) inputInvokers, inputURL, invocation));
+            assertNull(meshRuleRouter.route((List) inputInvokers, inputURL, invocation, false).getResult());
 
             meshRuleRouter.setSubsetMap(null);
-            assertNotNull(meshRuleRouter.route((List) inputInvokers, inputURL, invocation));
+            assertNotNull(meshRuleRouter.route((List) inputInvokers, inputURL, invocation, false).getResult());
         }
     }
 }

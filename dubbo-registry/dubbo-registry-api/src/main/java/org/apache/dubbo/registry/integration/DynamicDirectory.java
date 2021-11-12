@@ -21,6 +21,7 @@ import org.apache.dubbo.common.Version;
 import org.apache.dubbo.common.extension.ExtensionLoader;
 import org.apache.dubbo.common.logger.Logger;
 import org.apache.dubbo.common.logger.LoggerFactory;
+import org.apache.dubbo.common.utils.CollectionUtils;
 import org.apache.dubbo.common.utils.NetUtils;
 import org.apache.dubbo.registry.AddressListener;
 import org.apache.dubbo.registry.NotifyListener;
@@ -36,8 +37,8 @@ import org.apache.dubbo.rpc.cluster.Configurator;
 import org.apache.dubbo.rpc.cluster.RouterChain;
 import org.apache.dubbo.rpc.cluster.RouterFactory;
 import org.apache.dubbo.rpc.cluster.directory.AbstractDirectory;
+import org.apache.dubbo.rpc.cluster.router.state.BitList;
 
-import java.util.Collections;
 import java.util.List;
 
 import static org.apache.dubbo.common.constants.CommonConstants.ANY_VALUE;
@@ -56,40 +57,61 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
 
     private static final Logger logger = LoggerFactory.getLogger(DynamicDirectory.class);
 
-    protected static final Cluster CLUSTER = ExtensionLoader.getExtensionLoader(Cluster.class).getAdaptiveExtension();
+    protected final Cluster cluster;
 
-    protected static final RouterFactory ROUTER_FACTORY = ExtensionLoader.getExtensionLoader(RouterFactory.class)
-            .getAdaptiveExtension();
+    protected final RouterFactory routerFactory;
 
-    protected final String serviceKey; // Initialization at construction time, assertion not null
-    protected final Class<T> serviceType; // Initialization at construction time, assertion not null
-    protected final URL directoryUrl; // Initialization at construction time, assertion not null, and always assign non null value
+    /**
+     * Initialization at construction time, assertion not null
+     */
+    protected final String serviceKey;
+
+    /**
+     * Initialization at construction time, assertion not null
+     */
+    protected final Class<T> serviceType;
+
+    /**
+     * Initialization at construction time, assertion not null, and always assign non null value
+     */
+    protected final URL directoryUrl;
     protected final boolean multiGroup;
-    protected Protocol protocol; // Initialization at the time of injection, the assertion is not null
-    protected Registry registry; // Initialization at the time of injection, the assertion is not null
+
+    /**
+     * Initialization at the time of injection, the assertion is not null
+     */
+    protected Protocol protocol;
+
+    /**
+     * Initialization at the time of injection, the assertion is not null
+     */
+    protected Registry registry;
     protected volatile boolean forbidden = false;
     protected boolean shouldRegister;
     protected boolean shouldSimplified;
 
-    protected volatile URL overrideDirectoryUrl; // Initialization at construction time, assertion not null, and always assign non null value
+    /**
+     * Initialization at construction time, assertion not null, and always assign not null value
+     */
     protected volatile URL subscribeUrl;
     protected volatile URL registeredConsumerUrl;
 
     /**
+     * The initial value is null and the midway may be assigned to null, please use the local variable reference
      * override rules
      * Priority: override>-D>consumer>provider
      * Rule one: for a certain provider <ip:port,timeout=100>
      * Rule two: for all providers <* ,timeout=5000>
      */
-    protected volatile List<Configurator> configurators; // The initial value is null and the midway may be assigned to null, please use the local variable reference
-
-    protected volatile List<Invoker<T>> invokers;
-    // Set<invokerUrls> cache invokeUrls to invokers mapping.
+    protected volatile List<Configurator> configurators;
 
     protected ServiceInstancesChangedListener serviceListener;
 
     public DynamicDirectory(Class<T> serviceType, URL url) {
         super(url, true);
+
+        this.cluster = url.getOrDefaultApplicationModel().getExtensionLoader(Cluster.class).getAdaptiveExtension();
+        this.routerFactory = url.getOrDefaultApplicationModel().getExtensionLoader(RouterFactory.class).getAdaptiveExtension();
 
         if (serviceType == null) {
             throw new IllegalArgumentException("service type is null.");
@@ -105,7 +127,7 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
         this.serviceType = serviceType;
         this.serviceKey = super.getConsumerUrl().getServiceKey();
 
-        this.overrideDirectoryUrl = this.directoryUrl = consumerUrl;
+        this.directoryUrl = consumerUrl;
         String group = directoryUrl.getGroup("");
         this.multiGroup = group != null && (ANY_VALUE.equals(group) || group.contains(","));
     }
@@ -142,28 +164,27 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
     }
 
     @Override
-    public List<Invoker<T>> doList(Invocation invocation) {
+    public List<Invoker<T>> doList(BitList<Invoker<T>> invokers, Invocation invocation) {
         if (forbidden) {
             // 1. No service provider 2. Service providers are disabled
             throw new RpcException(RpcException.FORBIDDEN_EXCEPTION, "No provider available from registry " +
-                    getUrl().getAddress() + " for service " + getConsumerUrl().getServiceKey() + " on consumer " +
-                    NetUtils.getLocalHost() + " use dubbo version " + Version.getVersion() +
-                    ", please check status of providers(disabled, not registered or in blacklist).");
+                getUrl().getAddress() + " for service " + getConsumerUrl().getServiceKey() + " on consumer " +
+                NetUtils.getLocalHost() + " use dubbo version " + Version.getVersion() +
+                ", please check status of providers(disabled, not registered or in blacklist).");
         }
 
         if (multiGroup) {
-            return this.invokers == null ? Collections.emptyList() : this.invokers;
+            return this.getInvokers();
         }
 
-        List<Invoker<T>> invokers = null;
         try {
             // Get invokers from cache, only runtime routers will be executed.
-            invokers = routerChain.route(getConsumerUrl(), invocation);
+            List<Invoker<T>> result = routerChain.route(getConsumerUrl(), invokers, invocation);
+            return result == null ? BitList.emptyList() : result;
         } catch (Throwable t) {
             logger.error("Failed to execute router: " + getUrl() + ", cause: " + t.getMessage(), t);
+            return BitList.emptyList();
         }
-
-        return invokers == null ? Collections.emptyList() : invokers;
     }
 
     @Override
@@ -173,26 +194,42 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
 
     @Override
     public List<Invoker<T>> getAllInvokers() {
-        return this.invokers == null ? Collections.emptyList() : this.invokers;
+        return this.getInvokers();
     }
 
-    // The currently effective consumer url
+    /**
+     * The currently effective consumer url
+     *
+     * @return URL
+     */
     @Override
     public URL getConsumerUrl() {
-        return this.overrideDirectoryUrl;
+        return this.consumerUrl;
     }
 
-    // The original consumer url
+    /**
+     * The original consumer url
+     *
+     * @return URL
+     */
     public URL getOriginalConsumerUrl() {
-        return this.overrideDirectoryUrl;
+        return this.consumerUrl;
     }
 
-    // The url registered to registry or metadata center
+    /**
+     * The url registered to registry or metadata center
+     *
+     * @return URL
+     */
     public URL getRegisteredConsumerUrl() {
         return registeredConsumerUrl;
     }
 
-    // The url used to subscribe from registry
+    /**
+     * The url used to subscribe from registry
+     *
+     * @return URL
+     */
     public URL getSubscribeUrl() {
         return subscribeUrl;
     }
@@ -204,10 +241,10 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
     public void setRegisteredConsumerUrl(URL url) {
         if (!shouldSimplified) {
             this.registeredConsumerUrl = url.addParameters(CATEGORY_KEY, CONSUMERS_CATEGORY, CHECK_KEY,
-                    String.valueOf(false));
+                String.valueOf(false));
         } else {
             this.registeredConsumerUrl = URL.valueOf(url, DEFAULT_REGISTER_CONSUMER_KEYS, null).addParameters(
-                    CATEGORY_KEY, CONSUMERS_CATEGORY, CHECK_KEY, String.valueOf(false));
+                CATEGORY_KEY, CONSUMERS_CATEGORY, CHECK_KEY, String.valueOf(false));
         }
     }
 
@@ -215,8 +252,13 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
         this.setRouterChain(RouterChain.buildChain(url));
     }
 
-    public List<Invoker<T>> getInvokers() {
-        return invokers;
+    @Override
+    public boolean isAvailable() {
+        if (isDestroyed() || this.forbidden) {
+            return false;
+        }
+        return CollectionUtils.isNotEmpty(getValidInvokers())
+            && getValidInvokers().stream().anyMatch(Invoker::isAvailable);
     }
 
     @Override
@@ -242,7 +284,7 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
             logger.warn("unexpected error when unsubscribe service " + serviceKey + " from registry: " + registry.getUrl(), t);
         }
 
-        ExtensionLoader<AddressListener> addressListenerExtensionLoader = ExtensionLoader.getExtensionLoader(AddressListener.class);
+        ExtensionLoader<AddressListener> addressListenerExtensionLoader = getUrl().getOrDefaultModuleModel().getExtensionLoader(AddressListener.class);
         List<AddressListener> supportedListeners = addressListenerExtensionLoader.getActivateExtension(getUrl(), (String[]) null);
         if (supportedListeners != null && !supportedListeners.isEmpty()) {
             for (AddressListener addressListener : supportedListeners) {
@@ -284,6 +326,7 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
     }
 
     protected synchronized void invokersChanged() {
+        refreshInvoker();
         invokersChanged = true;
         if (invokersChangedListener != null) {
             invokersChangedListener.onChange();
@@ -291,6 +334,7 @@ public abstract class DynamicDirectory<T> extends AbstractDirectory<T> implement
         }
     }
 
+    @Override
     public boolean isNotificationReceived() {
         return invokersChanged;
     }

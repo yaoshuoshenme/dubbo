@@ -83,7 +83,10 @@ public abstract class AbstractReferenceConfig extends AbstractInterfaceConfig {
 
     /**
      * Weather the reference is refer asynchronously
+     * @deprecated
+     * @see ModuleConfig#referAsync
      */
+    @Deprecated
     private Boolean referAsync;
 
     @Override
@@ -110,12 +113,18 @@ public abstract class AbstractReferenceConfig extends AbstractInterfaceConfig {
         this.init = init;
     }
 
+    /**
+     * @deprecated Replace to {@link AbstractReferenceConfig#getGeneric()}
+     */
     @Deprecated
     @Parameter(excluded = true, attribute = false)
     public Boolean isGeneric() {
         return this.generic != null ? ProtocolUtils.isGeneric(generic) : null;
     }
 
+    /**
+     * @deprecated Replace to {@link AbstractReferenceConfig#setGeneric(String)}
+     */
     @Deprecated
     public void setGeneric(Boolean generic) {
         if (generic != null) {
@@ -238,11 +247,13 @@ public abstract class AbstractReferenceConfig extends AbstractInterfaceConfig {
         this.router = router;
     }
 
+    @Deprecated
     @Parameter(key = REFER_ASYNC_KEY)
     public Boolean getReferAsync() {
         return referAsync;
     }
 
+    @Deprecated
     public void setReferAsync(Boolean referAsync) {
         this.referAsync = referAsync;
     }

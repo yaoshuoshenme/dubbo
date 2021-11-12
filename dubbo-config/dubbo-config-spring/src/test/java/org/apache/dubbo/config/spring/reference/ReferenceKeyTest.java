@@ -16,7 +16,6 @@
  */
 package org.apache.dubbo.config.spring.reference;
 
-import com.alibaba.spring.util.AnnotationUtils;
 import org.apache.dubbo.config.annotation.Argument;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.apache.dubbo.config.annotation.Method;
@@ -26,13 +25,12 @@ import org.apache.dubbo.config.spring.api.DemoService;
 import org.apache.dubbo.config.spring.api.HelloService;
 import org.apache.dubbo.config.spring.impl.DemoServiceImpl;
 import org.apache.dubbo.config.spring.impl.HelloServiceImpl;
-import org.apache.dubbo.config.spring.registrycenter.ZookeeperSingleRegistryCenter;
-import org.apache.dubbo.config.spring.registrycenter.RegistryCenter;
+
+import com.alibaba.spring.util.AnnotationUtils;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -47,20 +45,6 @@ import java.lang.reflect.Field;
 import java.util.Map;
 
 public class ReferenceKeyTest {
-
-    private static RegistryCenter singleRegistryCenter;
-
-    @BeforeAll
-    public static void beforeAll() {
-        singleRegistryCenter = new ZookeeperSingleRegistryCenter();
-        singleRegistryCenter.startup();
-    }
-
-    @AfterAll
-    public static void afterAll() {
-        singleRegistryCenter.shutdown();
-    }
-
 
     @BeforeEach
     protected void setUp() {
@@ -127,6 +111,7 @@ public class ReferenceKeyTest {
     }
 
     @Test
+    @Disabled("support multi reference config")
     public void testConfig2() {
         try {
             AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(ConsumerConfiguration2.class);

@@ -17,6 +17,7 @@
 package org.apache.dubbo.registry.client.event.listener;
 
 import org.apache.dubbo.common.URL;
+import org.apache.dubbo.common.utils.StringUtils;
 import org.apache.dubbo.metadata.MetadataInfo;
 import org.apache.dubbo.metadata.MetadataService;
 import org.apache.dubbo.registry.NotifyListener;
@@ -29,6 +30,7 @@ import org.apache.dubbo.registry.client.metadata.MetadataUtils;
 
 import com.google.gson.Gson;
 import org.hamcrest.Matchers;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
@@ -49,11 +51,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static org.apache.dubbo.common.constants.CommonConstants.REVISION_KEY;
 import static org.apache.dubbo.common.utils.CollectionUtils.isEmpty;
 import static org.apache.dubbo.registry.client.metadata.ServiceInstanceMetadataUtils.EXPORTED_SERVICES_REVISION_PROPERTY_NAME;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 
 /**
@@ -69,6 +73,7 @@ public class ServiceInstancesChangedListenerTest {
     static List<ServiceInstance> app2Instances;
     static List<ServiceInstance> app1FailedInstances;
     static List<ServiceInstance> app1FailedInstances2;
+    static List<ServiceInstance> app1InstancesWithNoRevision;
 
     static String metadata_111 = "{\"app\":\"app1\",\"revision\":\"111\",\"services\":{"
         + "\"org.apache.dubbo.demo.DemoService:dubbo\":{\"name\":\"org.apache.dubbo.demo.DemoService\",\"protocol\":\"dubbo\",\"path\":\"org.apache.dubbo.demo.DemoService\",\"params\":{\"side\":\"provider\",\"release\":\"\",\"methods\":\"sayHello,sayHelloAsync\",\"deprecated\":\"false\",\"dubbo\":\"2.0.2\",\"pid\":\"72723\",\"interface\":\"org.apache.dubbo.demo.DemoService\",\"service-name-mapping\":\"true\",\"timeout\":\"3000\",\"generic\":\"false\",\"metadata-type\":\"remote\",\"delay\":\"5000\",\"application\":\"app1\",\"dynamic\":\"true\",\"REGISTRY_CLUSTER\":\"registry1\",\"anyhost\":\"true\",\"timestamp\":\"1625800233446\"}}"
@@ -87,6 +92,8 @@ public class ServiceInstancesChangedListenerTest {
         + "\"org.apache.dubbo.demo.DemoService:dubbo\":{\"name\":\"org.apache.dubbo.demo.DemoService\",\"protocol\":\"dubbo\",\"path\":\"org.apache.dubbo.demo.DemoService\",\"params\":{\"side\":\"provider\",\"release\":\"\",\"methods\":\"sayHello,sayHelloAsync\",\"deprecated\":\"false\",\"dubbo\":\"2.0.2\",\"pid\":\"72723\",\"interface\":\"org.apache.dubbo.demo.DemoService\",\"service-name-mapping\":\"true\",\"timeout\":\"3000\",\"generic\":\"false\",\"metadata-type\":\"remote\",\"delay\":\"5000\",\"application\":\"app2\",\"dynamic\":\"true\",\"REGISTRY_CLUSTER\":\"registry1\",\"anyhost\":\"true\",\"timestamp\":\"1625800233446\"}}"
         + "}}";
 
+    static String bad_metadatainfo = "{\"xxx\":\"yyy\"}";
+
     static String service1 = "org.apache.dubbo.demo.DemoService";
     static String service2 = "org.apache.dubbo.demo.DemoService2";
     static String service3 = "org.apache.dubbo.demo.DemoService3";
@@ -101,6 +108,8 @@ public class ServiceInstancesChangedListenerTest {
     static MetadataService metadataService;
 
     static ServiceDiscovery serviceDiscovery;
+
+    ServiceInstancesChangedListener listener = null;
 
     @BeforeAll
     public static void setUp() {
@@ -125,10 +134,14 @@ public class ServiceInstancesChangedListenerTest {
         urlsFailedRevision2.add("30.10.0.1:20880?revision=222");
         urlsFailedRevision2.add("30.10.0.2:20880?revision=222");
 
+        List<Object> urlsWithoutRevision = new ArrayList<>();
+        urlsWithoutRevision.add("30.10.0.1:20880");
+
         app1Instances = buildInstances(urlsSameRevision);
         app2Instances = buildInstances(urlsDifferentRevision);
         app1FailedInstances = buildInstances(urlsFailedRevision);
         app1FailedInstances2 = buildInstances(urlsFailedRevision2);
+        app1InstancesWithNoRevision = buildInstances(urlsWithoutRevision);
 
         metadataInfo_111 = gson.fromJson(metadata_111, MetadataInfo.class);
         metadataInfo_222 = gson.fromJson(metadata_222, MetadataInfo.class);
@@ -144,6 +157,14 @@ public class ServiceInstancesChangedListenerTest {
         serviceDiscovery = Mockito.mock(ServiceDiscovery.class);
     }
 
+    @AfterEach
+    public void tearDown() {
+        if (listener != null) {
+            listener.destroy();
+            listener = null;
+        }
+    }
+
     // 正常场景。单应用app1 通知地址基本流程，只做instance-metadata关联，没有metadata内容的解析
     @Test
     @Order(1)
@@ -151,7 +172,8 @@ public class ServiceInstancesChangedListenerTest {
         Set<String> serviceNames = new HashSet<>();
         serviceNames.add("app1");
         ServiceDiscovery serviceDiscovery = Mockito.mock(ServiceDiscovery.class);
-        ServiceInstancesChangedListener spyListener = Mockito.spy(new ServiceInstancesChangedListener(serviceNames, serviceDiscovery));
+        listener = new ServiceInstancesChangedListener(serviceNames, serviceDiscovery);
+        ServiceInstancesChangedListener spyListener = Mockito.spy(listener);
         Mockito.doReturn(metadataInfo_111).when(spyListener).getRemoteMetadata(eq("111"), Mockito.anyMap(), Mockito.any());
         ServiceInstancesChangedEvent event = new ServiceInstancesChangedEvent("app1", app1Instances);
         spyListener.onEvent(event);
@@ -179,7 +201,7 @@ public class ServiceInstancesChangedListenerTest {
     public void testInstanceNotificationAndMetadataParse() {
         Set<String> serviceNames = new HashSet<>();
         serviceNames.add("app1");
-        ServiceInstancesChangedListener listener = new ServiceInstancesChangedListener(serviceNames, serviceDiscovery);
+        listener = new ServiceInstancesChangedListener(serviceNames, serviceDiscovery);
 
         try (MockedStatic<MetadataUtils> mockedMetadataUtils = Mockito.mockStatic(MetadataUtils.class)) {
             mockedMetadataUtils.when(() -> MetadataUtils.getMetadataServiceProxy(Mockito.any())).thenReturn(metadataService);
@@ -197,7 +219,7 @@ public class ServiceInstancesChangedListenerTest {
 
             List<URL> serviceUrls = listener.getAddresses(service1 + ":dubbo", consumerURL);
             Assertions.assertEquals(3, serviceUrls.size());
-            Assertions.assertTrue(serviceUrls.get(0) instanceof InstanceAddressURL);
+            assertTrue(serviceUrls.get(0) instanceof InstanceAddressURL);
 
             assertThat(serviceUrls, Matchers.hasItem(Matchers.hasProperty("instance", Matchers.notNullValue())));
             assertThat(serviceUrls, Matchers.hasItem(Matchers.hasProperty("metadataInfo", Matchers.notNullValue())));
@@ -212,7 +234,7 @@ public class ServiceInstancesChangedListenerTest {
         Set<String> serviceNames = new HashSet<>();
         serviceNames.add("app1");
         serviceNames.add("app2");
-        ServiceInstancesChangedListener listener = new ServiceInstancesChangedListener(serviceNames, serviceDiscovery);
+        listener = new ServiceInstancesChangedListener(serviceNames, serviceDiscovery);
 
         try (MockedStatic<MetadataUtils> mockedMetadataUtils = Mockito.mockStatic(MetadataUtils.class)) {
             mockedMetadataUtils.when(() -> MetadataUtils.getMetadataServiceProxy(Mockito.any())).thenReturn(metadataService);
@@ -240,10 +262,10 @@ public class ServiceInstancesChangedListenerTest {
             Assertions.assertEquals(7, serviceUrls.size());
             List<URL> serviceUrls2 = listener.getAddresses(service2 + ":dubbo", consumerURL);
             Assertions.assertEquals(4, serviceUrls2.size());
-            Assertions.assertTrue(serviceUrls2.get(0).getIp().contains("30.10."));
+            assertTrue(serviceUrls2.get(0).getIp().contains("30.10."));
             List<URL> serviceUrls3 = listener.getAddresses(service3 + ":dubbo", consumerURL);
             Assertions.assertEquals(2, serviceUrls3.size());
-            Assertions.assertTrue(serviceUrls3.get(0).getIp().contains("30.10."));
+            assertTrue(serviceUrls3.get(0).getIp().contains("30.10."));
         }
     }
 
@@ -254,7 +276,7 @@ public class ServiceInstancesChangedListenerTest {
         Set<String> serviceNames = new HashSet<>();
         serviceNames.add("app1");
         serviceNames.add("app2");
-        ServiceInstancesChangedListener listener = new ServiceInstancesChangedListener(serviceNames, serviceDiscovery);
+        listener = new ServiceInstancesChangedListener(serviceNames, serviceDiscovery);
 
         try (MockedStatic<MetadataUtils> mockedMetadataUtils = Mockito.mockStatic(MetadataUtils.class)) {
             mockedMetadataUtils.when(() -> MetadataUtils.getMetadataServiceProxy(Mockito.any())).thenReturn(metadataService);
@@ -284,13 +306,13 @@ public class ServiceInstancesChangedListenerTest {
 
             List<URL> serviceUrls = listener.getAddresses(service1 + ":dubbo", consumerURL);
             Assertions.assertEquals(4, serviceUrls.size());
-            Assertions.assertTrue(serviceUrls.get(0).getIp().contains("30.10."));
+            assertTrue(serviceUrls.get(0).getIp().contains("30.10."));
             List<URL> serviceUrls2 = listener.getAddresses(service2 + ":dubbo", consumerURL);
             Assertions.assertEquals(4, serviceUrls2.size());
-            Assertions.assertTrue(serviceUrls2.get(0).getIp().contains("30.10."));
+            assertTrue(serviceUrls2.get(0).getIp().contains("30.10."));
             List<URL> serviceUrls3 = listener.getAddresses(service3 + ":dubbo", consumerURL);
             Assertions.assertEquals(2, serviceUrls3.size());
-            Assertions.assertTrue(serviceUrls3.get(0).getIp().contains("30.10."));
+            assertTrue(serviceUrls3.get(0).getIp().contains("30.10."));
 
             // app2 empty notification
             ServiceInstancesChangedEvent app2_event_again = new ServiceInstancesChangedEvent("app2", Collections.EMPTY_LIST);
@@ -305,9 +327,9 @@ public class ServiceInstancesChangedListenerTest {
             Map<String, MetadataInfo> revisionToMetadata_app2 = listener.getRevisionToMetadata();
             Assertions.assertEquals(0, revisionToMetadata_app2.size());
 
-            Assertions.assertTrue(isEmpty(listener.getAddresses(service1 + ":dubbo", consumerURL)));
-            Assertions.assertTrue(isEmpty(listener.getAddresses(service2+ ":dubbo", consumerURL)));
-            Assertions.assertTrue(isEmpty(listener.getAddresses(service3 + ":dubbo", consumerURL)));
+            assertTrue(isEmpty(listener.getAddresses(service1 + ":dubbo", consumerURL)));
+            assertTrue(isEmpty(listener.getAddresses(service2+ ":dubbo", consumerURL)));
+            assertTrue(isEmpty(listener.getAddresses(service3 + ":dubbo", consumerURL)));
         }
     }
 
@@ -318,7 +340,7 @@ public class ServiceInstancesChangedListenerTest {
         Set<String> serviceNames = new HashSet<>();
         serviceNames.add("app1");
         serviceNames.add("app2");
-        ServiceInstancesChangedListener listener = new ServiceInstancesChangedListener(serviceNames, serviceDiscovery);
+        listener = new ServiceInstancesChangedListener(serviceNames, serviceDiscovery);
         NotifyListener demoServiceListener = Mockito.mock(NotifyListener.class);
         NotifyListener demoService2Listener = Mockito.mock(NotifyListener.class);
         listener.addListenerAndNotify(service1 + ":dubbo", demoServiceListener);
@@ -367,7 +389,7 @@ public class ServiceInstancesChangedListenerTest {
     public void testRevisionFailureOnStartup() {
         Set<String> serviceNames = new HashSet<>();
         serviceNames.add("app1");
-        ServiceInstancesChangedListener listener = new ServiceInstancesChangedListener(serviceNames, serviceDiscovery);
+        listener = new ServiceInstancesChangedListener(serviceNames, serviceDiscovery);
         try (MockedStatic<MetadataUtils> mockedMetadataUtils = Mockito.mockStatic(MetadataUtils.class)) {
             mockedMetadataUtils.when(() -> MetadataUtils.getMetadataServiceProxy(Mockito.any())).thenReturn(metadataService);
             // notify app1 instance change
@@ -377,8 +399,8 @@ public class ServiceInstancesChangedListenerTest {
             List<URL> serviceUrls = listener.getAddresses(service1 + ":dubbo", consumerURL);
             List<URL> serviceUrls2 = listener.getAddresses(service2 + ":dubbo", consumerURL);
 
-            Assertions.assertTrue(isEmpty(serviceUrls));
-            Assertions.assertTrue(isEmpty(serviceUrls2));
+            assertTrue(isEmpty(serviceUrls));
+            assertTrue(isEmpty(serviceUrls2));
 
             Map<String, MetadataInfo> revisionToMetadata = listener.getRevisionToMetadata();
             Assertions.assertEquals(2, revisionToMetadata.size());
@@ -393,7 +415,7 @@ public class ServiceInstancesChangedListenerTest {
         Set<String> serviceNames = new HashSet<>();
         serviceNames.add("app1");
         serviceNames.add("app2");
-        ServiceInstancesChangedListener listener = new ServiceInstancesChangedListener(serviceNames, serviceDiscovery);
+        listener = new ServiceInstancesChangedListener(serviceNames, serviceDiscovery);
 
         ConcurrentMap tmpProxyMap = MetadataUtils.metadataServiceProxies;
 
@@ -439,7 +461,7 @@ public class ServiceInstancesChangedListenerTest {
             Assertions.assertEquals(MetadataInfo.EMPTY, revisionToMetadata.get("222"));
 
             Assertions.assertEquals(3, listener.getAddresses(service1 + ":dubbo", consumerURL).size());
-            Assertions.assertTrue(isEmpty(listener.getAddresses(service2 + ":dubbo", consumerURL)));
+            assertTrue(isEmpty(listener.getAddresses(service2 + ":dubbo", consumerURL)));
 
             try {
                 Thread.sleep(15000);
@@ -461,6 +483,30 @@ public class ServiceInstancesChangedListenerTest {
         }
     }
 
+    // Abnormal case. Instance does not has revision
+    @Test
+    public void testInstanceWithoutRevision() {
+        Set<String> serviceNames = new HashSet<>();
+        serviceNames.add("app1");
+        ServiceDiscovery serviceDiscovery = Mockito.mock(ServiceDiscovery.class);
+        listener = new ServiceInstancesChangedListener(serviceNames, serviceDiscovery);
+        ServiceInstancesChangedListener spyListener = Mockito.spy(listener);
+        Mockito.doReturn(null).when(spyListener).getRemoteMetadata(eq(null), Mockito.anyMap(), Mockito.any());
+        ServiceInstancesChangedEvent event = new ServiceInstancesChangedEvent("app1", app1InstancesWithNoRevision);
+        spyListener.onEvent(event);
+        // notification succeeded
+        assertTrue(true);
+    }
+
+    @Test
+    public void testSelectInstance() {
+        System.out.println(ThreadLocalRandom.current().nextInt(0, 100));
+        System.out.println(ThreadLocalRandom.current().nextInt(0, 100));
+        System.out.println(ThreadLocalRandom.current().nextInt(0, 100));
+        System.out.println(ThreadLocalRandom.current().nextInt(0, 100));
+        System.out.println(ThreadLocalRandom.current().nextInt(0, 100));
+    }
+
     static List<ServiceInstance> buildInstances(List<Object> rawURls) {
         List<ServiceInstance> instances = new ArrayList<>();
 
@@ -468,7 +514,6 @@ public class ServiceInstancesChangedListenerTest {
             String rawURL = (String)obj;
             DefaultServiceInstance instance = new DefaultServiceInstance();
             final URL dubboUrl = URL.valueOf(rawURL);
-            instance = new DefaultServiceInstance();
             instance.setRawAddress(rawURL);
             instance.setHost(dubboUrl.getHost());
             instance.setEnabled(true);
@@ -477,7 +522,9 @@ public class ServiceInstancesChangedListenerTest {
             instance.setRegistryCluster("default");
 
             Map<String, String> metadata = new HashMap<>();
-            metadata.put(EXPORTED_SERVICES_REVISION_PROPERTY_NAME, dubboUrl.getParameter(REVISION_KEY));
+            if (StringUtils.isNotEmpty(dubboUrl.getParameter(REVISION_KEY))) {
+                metadata.put(EXPORTED_SERVICES_REVISION_PROPERTY_NAME, dubboUrl.getParameter(REVISION_KEY));
+            }
             instance.setMetadata(metadata);
 
             instances.add(instance);

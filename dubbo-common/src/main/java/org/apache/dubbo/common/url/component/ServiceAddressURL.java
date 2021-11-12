@@ -18,6 +18,8 @@ package org.apache.dubbo.common.url.component;
 
 import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.utils.StringUtils;
+import org.apache.dubbo.rpc.model.ScopeModel;
+import org.apache.dubbo.rpc.model.ServiceModel;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -212,6 +214,26 @@ public abstract class ServiceAddressURL extends URL {
         return super.hashCode();
     }
 
+    @Override
+    public ScopeModel getScopeModel() {
+        return consumerURL.getScopeModel();
+    }
+
+    @Override
+    public ServiceModel getServiceModel() {
+        return consumerURL.getServiceModel();
+    }
+
+    @Override
+    public URL setScopeModel(ScopeModel scopeModel) {
+        throw new UnsupportedOperationException("setScopeModel is forbidden for ServiceAddressURL");
+    }
+
+    @Override
+    public URL setServiceModel(ServiceModel serviceModel) {
+        throw new UnsupportedOperationException("setServiceModel is forbidden for ServiceAddressURL");
+    }
+
     /**
      * ignore consumer url compare.
      * It's only meaningful for comparing two address urls related to the same consumerURL.
@@ -231,5 +253,11 @@ public abstract class ServiceAddressURL extends URL {
             return false;
         }
         return super.equals(obj);
+    }
+
+    @Override
+    public String toString() {
+        URLParam totalParam = getUrlParam().addParametersIfAbsent(consumerURL.getParameters());
+        return new ServiceConfigURL(getUrlAddress(), totalParam, null).toString();
     }
 }

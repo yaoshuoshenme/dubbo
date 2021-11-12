@@ -16,17 +16,16 @@
  */
 package org.apache.dubbo.rpc.cluster.router.state;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
-
 import org.apache.dubbo.common.URL;
-import org.apache.dubbo.common.extension.ExtensionLoader;
 import org.apache.dubbo.rpc.Invocation;
 import org.apache.dubbo.rpc.Invoker;
 import org.apache.dubbo.rpc.RpcException;
 import org.apache.dubbo.rpc.cluster.RouterChain;
 import org.apache.dubbo.rpc.cluster.governance.GovernanceRuleRepository;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 /***
  * The abstract class of StateRoute.
@@ -42,7 +41,7 @@ public abstract class AbstractStateRouter implements StateRouter {
     protected GovernanceRuleRepository ruleRepository;
 
     public AbstractStateRouter(URL url, RouterChain chain) {
-        this.ruleRepository = ExtensionLoader.getExtensionLoader(GovernanceRuleRepository.class).getDefaultExtension();
+        this.ruleRepository = url.getOrDefaultModuleModel().getExtensionLoader(GovernanceRuleRepository.class).getDefaultExtension();
         this.chain = chain;
         this.url = url;
     }
@@ -85,23 +84,27 @@ public abstract class AbstractStateRouter implements StateRouter {
     }
 
     @Override
-    public <T> BitList<Invoker<T>> route(BitList<Invoker<T>> invokers, RouterCache<T> cache, URL url,
-        Invocation invocation) throws RpcException {
+    public <T> StateRouterResult<Invoker<T>> route(BitList<Invoker<T>> invokers, RouterCache<T> cache, URL url,
+        Invocation invocation, boolean needToPrintMessage) throws RpcException {
 
         List<String> tags = getTags(url, invocation);
 
         if (tags == null) {
-            return invokers;
+            return new StateRouterResult<>(invokers);
         }
         for (String tag : tags) {
             BitList<Invoker<T>> tagInvokers = cache.getAddrPool().get(tag);
             if (tagMatchFail(tagInvokers)) {
                 continue;
             }
-            return tagInvokers.intersect(invokers, invokers.getUnmodifiableList());
+            if (needToPrintMessage) {
+                return new StateRouterResult<>(invokers.and(tagInvokers), "use tag " + tag + " to route");
+            } else {
+                return new StateRouterResult<>(invokers.and(tagInvokers));
+            }
         }
 
-        return invokers;
+        return new StateRouterResult<>(invokers);
     }
 
     protected List<String> getTags(URL url, Invocation invocation) {

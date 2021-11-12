@@ -17,6 +17,7 @@
 package org.apache.dubbo.common.threadpool.manager;
 
 import org.apache.dubbo.common.URL;
+import org.apache.dubbo.common.extension.ExtensionScope;
 import org.apache.dubbo.common.extension.SPI;
 
 import java.util.concurrent.ExecutorService;
@@ -25,7 +26,7 @@ import java.util.concurrent.ScheduledExecutorService;
 /**
  *
  */
-@SPI("default")
+@SPI(value = "default", scope = ExtensionScope.APPLICATION)
 public interface ExecutorRepository {
 
     /**
@@ -57,7 +58,7 @@ public interface ExecutorRepository {
 
     ExecutorService nextExecutorExecutor();
 
-    ExecutorService getServiceExportExecutor();
+    ScheduledExecutorService getServiceExportExecutor();
 
     /**
      * The executor only used in bootstrap currently, we should call this method to release the resource
@@ -91,7 +92,20 @@ public interface ExecutorRepository {
      */
     ExecutorService getSharedExecutor();
 
+    /**
+     * Get the shared schedule executor
+     * @return
+     */
+    ScheduledExecutorService getSharedScheduledExecutor();
+
     ExecutorService getPoolRouterExecutor();
+
+    /**
+     * Scheduled executor handle connectivity check task
+     *
+     * @return
+     */
+    ScheduledExecutorService getConnectivityScheduledExecutor();
 
     /**
      * Destroy all executors that are not in shutdown state

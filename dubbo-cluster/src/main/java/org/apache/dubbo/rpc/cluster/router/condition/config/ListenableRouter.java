@@ -30,6 +30,7 @@ import org.apache.dubbo.rpc.Invoker;
 import org.apache.dubbo.rpc.RpcException;
 import org.apache.dubbo.rpc.cluster.Router;
 import org.apache.dubbo.rpc.cluster.router.AbstractRouter;
+import org.apache.dubbo.rpc.cluster.router.RouterResult;
 import org.apache.dubbo.rpc.cluster.router.condition.ConditionRouter;
 import org.apache.dubbo.rpc.cluster.router.condition.config.model.ConditionRouterRule;
 import org.apache.dubbo.rpc.cluster.router.condition.config.model.ConditionRuleParser;
@@ -46,13 +47,15 @@ public abstract class ListenableRouter extends AbstractRouter implements Configu
     private static final String RULE_SUFFIX = ".condition-router";
 
     private static final Logger logger = LoggerFactory.getLogger(ListenableRouter.class);
-    private ConditionRouterRule routerRule;
-    private List<ConditionRouter> conditionRouters = Collections.emptyList();
+    private volatile ConditionRouterRule routerRule;
+    private volatile List<ConditionRouter> conditionRouters = Collections.emptyList();
+    private String ruleKey;
 
     public ListenableRouter(URL url, String ruleKey) {
         super(url);
         this.setForce(false);
         this.init(ruleKey);
+        this.ruleKey = ruleKey;
     }
 
     @Override
@@ -77,17 +80,18 @@ public abstract class ListenableRouter extends AbstractRouter implements Configu
     }
 
     @Override
-    public <T> List<Invoker<T>> route(List<Invoker<T>> invokers, URL url, Invocation invocation) throws RpcException {
+    public <T> RouterResult<Invoker<T>> route(List<Invoker<T>> invokers, URL url,
+                                              Invocation invocation, boolean needToPrintMessage) throws RpcException {
         if (CollectionUtils.isEmpty(invokers) || conditionRouters.size() == 0) {
-            return invokers;
+            return new RouterResult<>(invokers);
         }
 
         // We will check enabled status inside each router.
         for (Router router : conditionRouters) {
-            invokers = router.route(invokers, url, invocation);
+            invokers = router.route(invokers, url, invocation, needToPrintMessage).getResult();
         }
 
-        return invokers;
+        return new RouterResult<>(invokers);
     }
 
     @Override
@@ -118,5 +122,10 @@ public abstract class ListenableRouter extends AbstractRouter implements Configu
         if (StringUtils.isNotEmpty(rule)) {
             this.process(new ConfigChangedEvent(routerKey, DynamicConfiguration.DEFAULT_GROUP, rule));
         }
+    }
+
+    @Override
+    public void stop() {
+        this.getRuleRepository().removeListener(ruleKey, this);
     }
 }

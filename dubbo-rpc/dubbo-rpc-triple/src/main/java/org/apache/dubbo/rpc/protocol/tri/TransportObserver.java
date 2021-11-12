@@ -17,26 +17,40 @@
 
 package org.apache.dubbo.rpc.protocol.tri;
 
+/**
+ * An observer used for transport messaging which provides full streaming support.
+ * A TransportObserver receives raw data or control messages from local/remote.
+ * Implementations should prefer to extend {@link OutboundTransportObserver} and {@link InboundTransportObserver}
+ * instead of this interface.
+ */
 public interface TransportObserver {
-    Stream.OperationHandler EMPTY_HANDLER = (result, cause) -> {
-    };
 
-    default void tryOnMetadata(Metadata metadata, boolean endStream) {
-        onMetadata(metadata, endStream, EMPTY_HANDLER);
-    }
+    /**
+     * Transport metadata
+     *
+     * @param metadata  metadata KV paris
+     * @param endStream whether this data should terminate the stream
+     */
+    void onMetadata(Metadata metadata, boolean endStream);
 
-    default void tryOnData(byte[] data, boolean endStream) {
-        onData(data, endStream, EMPTY_HANDLER);
-    }
+    /**
+     * Transport data
+     *
+     * @param data      raw byte array
+     * @param endStream whether this data should terminate the stream
+     */
+    void onData(byte[] data, boolean endStream);
 
-    default void tryOnComplete() {
-        onComplete(EMPTY_HANDLER);
-    }
+    /**
+     * Error
+     *
+     * @param status error status
+     */
+    void onError(GrpcStatus status);
 
-    void onMetadata(Metadata metadata, boolean endStream, Stream.OperationHandler handler);
-
-    void onData(byte[] data, boolean endStream, Stream.OperationHandler handler);
-
-    void onComplete(Stream.OperationHandler handler);
+    /**
+     * Set stream completed
+     */
+    void onComplete();
 
 }

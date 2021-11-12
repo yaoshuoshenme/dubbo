@@ -17,18 +17,17 @@
 package org.apache.dubbo.rpc.cluster.loadbalance;
 
 import org.apache.dubbo.common.URL;
-import org.apache.dubbo.common.utils.NamedThreadFactory;
 import org.apache.dubbo.rpc.Invocation;
 import org.apache.dubbo.rpc.Invoker;
 import org.apache.dubbo.rpc.RpcStatus;
 import org.apache.dubbo.rpc.cluster.Constants;
 import org.apache.dubbo.rpc.model.ApplicationModel;
+import org.apache.dubbo.rpc.model.ScopeModelAware;
 
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -41,11 +40,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * if there are multiple invokers and the weights are not the same, then random according to the total weight;
  * if there are multiple invokers and the same weight, then randomly called.
  */
-public class ShortestResponseLoadBalance extends AbstractLoadBalance {
+public class ShortestResponseLoadBalance extends AbstractLoadBalance implements ScopeModelAware {
 
     public static final String NAME = "shortestresponse";
 
-    private static final int SLIDE_PERIOD = ApplicationModel.getEnvironment().getConfiguration().getInt(Constants.SHORTEST_RESPONSE_SLIDE_PERIOD, 30_000);
+    private int slidePeriod = 30_000;
 
     private ConcurrentMap<RpcStatus, SlideWindowData> methodMap = new ConcurrentHashMap<>();
 
@@ -53,8 +52,15 @@ public class ShortestResponseLoadBalance extends AbstractLoadBalance {
 
     private volatile long lastUpdateTime = System.currentTimeMillis();
 
+    private ExecutorService executorService;
+
+    @Override
+    public void setApplicationModel(ApplicationModel applicationModel) {
+        slidePeriod = applicationModel.getModelEnvironment().getConfiguration().getInt(Constants.SHORTEST_RESPONSE_SLIDE_PERIOD, 30_000);
+        executorService = applicationModel.getApplicationExecutorRepository().getSharedExecutor();
+    }
+
     protected static class SlideWindowData {
-        private final static ExecutorService EXECUTOR_SERVICE = Executors.newSingleThreadExecutor((new NamedThreadFactory("Dubbo-slidePeriod-reset")));
 
         private long succeededOffset;
         private long succeededElapsedOffset;
@@ -132,10 +138,10 @@ public class ShortestResponseLoadBalance extends AbstractLoadBalance {
             }
         }
 
-        if (System.currentTimeMillis() - lastUpdateTime > SLIDE_PERIOD
+        if (System.currentTimeMillis() - lastUpdateTime > slidePeriod
             && onResetSlideWindow.compareAndSet(false, true)) {
             //reset slideWindowData in async way
-            SlideWindowData.EXECUTOR_SERVICE.execute(() -> {
+            executorService.execute(() -> {
                 methodMap.values().forEach(SlideWindowData::reset);
                 lastUpdateTime = System.currentTimeMillis();
                 onResetSlideWindow.set(false);
